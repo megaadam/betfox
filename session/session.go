@@ -12,7 +12,17 @@ import (
 	"strings"
 
 	"github.com/Nyarum/betting"
+	"github.com/go-openapi/runtime"
+	httptransport "github.com/go-openapi/runtime/client"
+	"github.com/go-openapi/strfmt"
+	"github.com/megaadam/betfox/betfair/client"
+	"github.com/megaadam/betfox/betfair/client/operations"
+	"github.com/megaadam/betfox/betfair/models"
 )
+
+const ssoURL = "https://identitysso-cert.betfair.se:443/api/certlogin"
+const streamURL = "stream-api.betfair.com:443"
+const streamIntegrationURL = "stream-api-integration.betfair.com:443"
 
 type creds struct {
 	User   string `json:"user"`
@@ -20,8 +30,121 @@ type creds struct {
 	AppKey string `json:"appKey"`
 }
 
-// Login --stuff
+func opFunc(opts *runtime.ClientOperation) {
+	opts.Schemes = []string{"https"}
+	// opts.PathPattern = ""
+}
+
+// GetNyarumClient --
+func GetNyarumClient(appKey string) *betting.Betfair {
+	client := betting.NewBetfair(appKey)
+	config := loadConfig()
+
+	err := client.GetSession(config.CertPem, config.CertKey, config.Login, config.Password)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return client
+}
+
+func newTrue() *bool {
+	b := true
+	return &b
+}
+
+// Login --
 func Login() {
+	// creds
+	file, _ := ioutil.ReadFile("/home/a/.betfair/creds.json")
+	creds := creds{}
+	_ = json.Unmarshal([]byte(file), &creds)
+
+	nyarumClient := GetNyarumClient(creds.AppKey)
+
+	details, err := nyarumClient.GetAccountDetails()
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(details)
+
+	filter := betting.Filter{Wallet: betting.W_UK}
+	funds, err := nyarumClient.GetAccountFunds(filter)
+
+	fmt.Println(funds)
+	mf := betting.MarketFilter{InPlayOnly: newTrue(),
+		EventTypeIDs:    []string{"1"},
+		MarketTypeCodes: []string{"MATCH_ODDS"},
+	}
+
+	f2 := betting.Filter{MarketFilter: &mf,
+		MaxResults:   20,
+		FromCurrency: "SEK",
+	}
+	mt, err := nyarumClient.ListMarketTypes(f2)
+
+	_ = mt
+	// events, err := nyarumClient.ListEvents(f2)
+	// fmt.Println(events[0])
+
+	mp := []betting.EMarketProjection{"COMPETITION",
+		"EVENT",
+		"EVENT_TYPE",
+		//		"EVENT_TYPE",
+		"MARKET_DESCRIPTION",
+		"RUNNER_DESCRIPTION",
+		//		"RUNNER_METADATA",
+	}
+
+	f2.MarketProjection = &mp
+	f2.Sort = "LAST_TO_START"
+	markets, err := nyarumClient.ListMarketCatalogue(f2)
+
+	for _, market := range markets {
+		_ = market
+	}
+
+	return
+
+	///////////////////////////////////////
+	config := loadConfig()
+
+	cfg := client.DefaultTransportConfig()
+	cfg.Host = streamIntegrationURL
+	cli := client.NewHTTPClientWithConfig(strfmt.Default, cfg)
+
+	tls := new(httptransport.TLSClientOptions)
+	tls.Certificate = config.CertPem
+	tls.Key = config.CertKey
+	tls.InsecureSkipVerify = true
+
+	tlst, err := httptransport.TLSTransport(*tls)
+	fmt.Println(tlst)
+
+	prp := operations.NewPostRequestParams()
+	rm := new(models.AllRequestTypesExample)
+	rm.Authentication = new(models.AuthenticationMessage)
+	rm.Authentication.AppKey = creds.AppKey
+	rm.Authentication.Session = nyarumClient.SessionKey
+
+	prp.RequestMessage = rm
+	eee := cli.Operations.PostRequest(prp, opFunc)
+
+	m := models.AuthenticationMessage{}
+	m.AppKey = creds.AppKey
+	m.Session = nyarumClient.SessionKey
+
+	//res, err = models.AllRequestTypesExample
+
+	fmt.Println(m, eee)
+}
+
+func testSwag() {
+	flt := models.MarketFilter{}
+	_ = flt
+	return
+}
+
+func classicLogin() {
 	// creds
 	file, _ := ioutil.ReadFile("/home/a/.betfair/creds.json")
 	creds := creds{}
@@ -42,7 +165,7 @@ func Login() {
 	transport := http.Transport{
 		TLSClientConfig: &tlsConfig,
 	}
-	client := http.Client{
+	clx := http.Client{
 		Transport: &transport,
 	}
 
@@ -63,29 +186,13 @@ func Login() {
 		Body: reqBody,
 	}
 
-	res, err := client.Do(req)
+	res, err := clx.Do(req)
 
 	fmt.Println(res, err)
 	// read response body
 	data, _ := ioutil.ReadAll(res.Body)
 	fmt.Printf("%s\n", data)
 
-	bet := betting.NewBet(creds.AppKey)
-	config := loadConfig()
-
-	err = bet.GetSession(config.CertPem, config.CertKey, config.Login, config.Password)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	details, err := bet.GetAccountDetails()
-	fmt.Println(details)
-
-	filter := betting.Filter{}
-	filter.Wallet = betting.W_UK
-	funds, err := bet.GetAccountFunds(filter)
-
-	fmt.Println(funds)
 }
 
 type Test struct {
