@@ -13,10 +13,6 @@ import (
 
 	"github.com/Nyarum/betting"
 	"github.com/go-openapi/runtime"
-	httptransport "github.com/go-openapi/runtime/client"
-	"github.com/go-openapi/strfmt"
-	"github.com/megaadam/betfox/betfair/client"
-	"github.com/megaadam/betfox/betfair/client/operations"
 	"github.com/megaadam/betfox/betfair/models"
 )
 
@@ -123,89 +119,6 @@ func Login() *betting.Betfair {
 
 	nyarumClient := GetNyarumClient(creds.AppKey)
 	return nyarumClient
-
-	details, err := nyarumClient.GetAccountDetails()
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(details)
-
-	filter := betting.Filter{Wallet: betting.W_UK}
-	funds, err := nyarumClient.GetAccountFunds(filter)
-
-	fmt.Println(funds)
-	mf := betting.MarketFilter{InPlayOnly: newTrue(),
-		EventTypeIDs:    []string{"1"},
-		MarketTypeCodes: []string{"MATCH_ODDS"},
-	}
-
-	f2 := betting.Filter{MarketFilter: &mf,
-		MaxResults:   20,
-		FromCurrency: "SEK",
-	}
-	mt, err := nyarumClient.ListMarketTypes(f2)
-
-	_ = mt
-	// events, err := nyarumClient.ListEvents(f2)
-	// fmt.Println(events[0])
-
-	mp := []betting.EMarketProjection{"COMPETITION",
-		"EVENT",
-		"EVENT_TYPE",
-		//		"EVENT_TYPE",
-		"MARKET_DESCRIPTION",
-		"RUNNER_DESCRIPTION",
-		//		"RUNNER_METADATA",
-	}
-
-	f2.MarketProjection = &mp
-	f2.Sort = "LAST_TO_START"
-	markets, err := nyarumClient.ListMarketCatalogue(f2)
-
-	for _, market := range markets {
-		_ = market
-	}
-
-	return nyarumClient
-
-	///////////////////////////////////////
-	config := loadConfig()
-
-	cfg := client.DefaultTransportConfig()
-	cfg.Host = streamIntegrationURL
-	cli := client.NewHTTPClientWithConfig(strfmt.Default, cfg)
-
-	tls := new(httptransport.TLSClientOptions)
-	tls.Certificate = config.CertPem
-	tls.Key = config.CertKey
-	tls.InsecureSkipVerify = true
-
-	tlst, err := httptransport.TLSTransport(*tls)
-	fmt.Println(tlst)
-
-	prp := operations.NewPostRequestParams()
-	rm := new(models.AllRequestTypesExample)
-	rm.Authentication = new(models.AuthenticationMessage)
-	rm.Authentication.AppKey = creds.AppKey
-	rm.Authentication.Session = nyarumClient.SessionKey
-
-	prp.RequestMessage = rm
-	eee := cli.Operations.PostRequest(prp, opFunc)
-
-	m := models.AuthenticationMessage{}
-	m.AppKey = creds.AppKey
-	m.Session = nyarumClient.SessionKey
-
-	//res, err = models.AllRequestTypesExample
-
-	fmt.Println(m, eee)
-	return nyarumClient
-}
-
-func print(err error) {
-	if err != nil {
-		fmt.Println(err)
-	}
 }
 
 func testSwag() {
