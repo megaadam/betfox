@@ -30,6 +30,9 @@ type creds struct {
 	AppKey string `json:"appKey"`
 }
 
+// NyarumClient -- Wrapper type to expand type betting.Betfair
+type NyarumClient betting.Betfair
+
 func opFunc(opts *runtime.ClientOperation) {
 	opts.Schemes = []string{"https"}
 	// opts.PathPattern = ""
@@ -52,14 +55,74 @@ func newTrue() *bool {
 	return &b
 }
 
+// Details --
+func (cli *NyarumClient) Details() (betting.AccountDetails, error) {
+
+	details, err := cli.GetAccountDetails()
+	print(err)
+
+	fmt.Println(details)
+	return details, err
+}
+
+// Funds --
+func (cli *NyarumClient) Funds() (betting.AccountFunds, error) {
+	filter := betting.Filter{Wallet: betting.W_UK}
+	funds, err := cli.GetAccountFunds(filter)
+	print(err)
+
+	fmt.Println(funds)
+	return funds, err
+}
+
+// Markets --
+func (cli *NyarumClient) Markets() ([]betting.MarketCatalogue, error) {
+	mf := betting.MarketFilter{InPlayOnly: newTrue(),
+		EventTypeIDs:    []string{"1"},
+		MarketTypeCodes: []string{"MATCH_ODDS"},
+	}
+
+	f2 := betting.Filter{MarketFilter: &mf,
+		MaxResults:   20,
+		FromCurrency: "SEK",
+	}
+	mt, err := cli.ListMarketTypes(f2)
+
+	_ = mt
+	// events, err := nyarumClient.ListEvents(f2)
+	// fmt.Println(events[0])
+
+	mp := []betting.EMarketProjection{"COMPETITION",
+		"EVENT",
+		"EVENT_TYPE",
+		//		"EVENT_TYPE",
+		"MARKET_DESCRIPTION",
+		"RUNNER_DESCRIPTION",
+		//		"RUNNER_METADATA",
+	}
+
+	f2.MarketProjection = &mp
+	f2.Sort = "LAST_TO_START"
+	markets, err := cli.ListMarketCatalogue(f2)
+
+	for _, market := range markets {
+		_ = market.MarketName
+		fmt.Println(market.Event.Name)
+	}
+
+	return markets, err
+
+}
+
 // Login --
-func Login() {
+func Login() *betting.Betfair {
 	// creds
 	file, _ := ioutil.ReadFile("/home/a/.betfair/creds.json")
 	creds := creds{}
 	_ = json.Unmarshal([]byte(file), &creds)
 
 	nyarumClient := GetNyarumClient(creds.AppKey)
+	return nyarumClient
 
 	details, err := nyarumClient.GetAccountDetails()
 	if err != nil {
@@ -103,7 +166,7 @@ func Login() {
 		_ = market
 	}
 
-	return
+	return nyarumClient
 
 	///////////////////////////////////////
 	config := loadConfig()
@@ -136,6 +199,13 @@ func Login() {
 	//res, err = models.AllRequestTypesExample
 
 	fmt.Println(m, eee)
+	return nyarumClient
+}
+
+func print(err error) {
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func testSwag() {
