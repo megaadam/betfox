@@ -14,6 +14,8 @@ import (
 	"github.com/Nyarum/betting"
 	"github.com/go-openapi/runtime"
 	"github.com/megaadam/betfox/betfair/models"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 const ssoURL = "https://identitysso-cert.betfair.se:443/api/certlogin"
@@ -55,7 +57,7 @@ func newTrue() *bool {
 func (cli *NyarumClient) Details() (betting.AccountDetails, error) {
 
 	details, err := cli.GetAccountDetails()
-	print(err)
+	perr(err)
 
 	fmt.Println(details)
 	return details, err
@@ -65,7 +67,7 @@ func (cli *NyarumClient) Details() (betting.AccountDetails, error) {
 func (cli *NyarumClient) Funds() (betting.AccountFunds, error) {
 	filter := betting.Filter{Wallet: betting.W_UK}
 	funds, err := cli.GetAccountFunds(filter)
-	print(err)
+	perr(err)
 
 	fmt.Println(funds)
 	return funds, err
@@ -98,16 +100,30 @@ func (cli *NyarumClient) Markets() ([]betting.MarketCatalogue, error) {
 	}
 
 	f2.MarketProjection = &mp
-	f2.Sort = "LAST_TO_START"
+	f2.Sort = "MAXIMUM_TRADED"
 	markets, err := cli.ListMarketCatalogue(f2)
 
 	for _, market := range markets {
-		_ = market.MarketName
-		fmt.Println(market.Event.Name)
+		mb, err := cli.MarketBook(market.MarketID)
+		perr(err)
+		p := message.NewPrinter(language.German)
+
+		delay := mb.BetDelay
+		p.Printf("%d \t%d\t", (int)(market.TotalMatched), delay)
+
+		//fmt.Printf("%d \t", (int)(market.TotalMatched))
+		fmt.Println(market.Event.Name, "%t", market.Competition.Name)
+
 	}
 
 	return markets, err
+}
 
+// MarketBook --
+func (cli *NyarumClient) MarketBook(marketID string) (betting.MarketBook, error) {
+	filter := betting.Filter{MarketIDs: []string{marketID}}
+	mb, err := cli.ListMarketBook(filter)
+	return mb[0], err
 }
 
 // Login --
@@ -127,6 +143,11 @@ func testSwag() {
 	return
 }
 
+func perr(err error) {
+	if err != nil {
+		fmt.Println(err)
+	}
+}
 func classicLogin() {
 	// creds
 	file, _ := ioutil.ReadFile("/home/a/.betfair/creds.json")
