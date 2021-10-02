@@ -18,4 +18,5 @@ func main() {
 
 	_, err = cli.Markets()
 
+	session.Stream(cli.Client.ApiKey, cli.Client.SessionKey)
 }

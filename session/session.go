@@ -5,11 +5,15 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+
+	//httptransport "github.com/go-openapi/runtime/client"
 
 	"github.com/Nyarum/betting"
 	"github.com/go-openapi/runtime"
@@ -26,6 +30,16 @@ type creds struct {
 	User   string `json:"user"`
 	Pass   string `json:"pass"`
 	AppKey string `json:"appKey"`
+}
+
+// '{\\\"authentication\\\":{\\\"appKey\\\":\\\"jvisaiEIJz06FUlF\\\",\\\
+//"session\\\":\\\"HBD7dsV9sSOj3cS/T1r9JFuF0Q7pceltvZwQGJBabVs=\\\",\\\
+// "op\\\":\\\"AuthenticationMessage\\\"},\\\""
+
+type streamAuth struct {
+	AppKey  string `json:"appKey"`
+	Session string `json:"session"`
+	Op      string `json:"op"`
 }
 
 // NyarumClient -- Wrapper type to expand type betting.Betfair
@@ -103,20 +117,126 @@ func (cli *NyarumClient) Markets() ([]betting.MarketCatalogue, error) {
 	f2.Sort = "MAXIMUM_TRADED"
 	markets, err := cli.ListMarketCatalogue(f2)
 
+	marketIDs := cli.getMarketIDs(markets)
+	books, err := cli.MarketBooks(marketIDs)
+	for _, book := range books {
+		p := message.NewPrinter(language.German)
+		p.Printf("%d\n", (int)(book.TotalMatched))
+	}
+
 	for _, market := range markets {
 		mb, err := cli.MarketBook(market.MarketID)
 		perr(err)
 		p := message.NewPrinter(language.German)
 
 		delay := mb.BetDelay
-		p.Printf("%d \t%d\t", (int)(market.TotalMatched), delay)
+		p.Printf("%d \t%d\t", (int)(mb.TotalMatched), delay)
 
 		//fmt.Printf("%d \t", (int)(market.TotalMatched))
-		fmt.Println(market.Event.Name, "%t", market.Competition.Name)
+		fmt.Println(market.Event.Name, "\t", market.Competition.Name)
 
 	}
 
 	return markets, err
+} // Markets()
+
+// Stream
+func Stream(apiKey, sessionKey string) {
+	log.SetOutput(os.Stdout)
+	config := loadConfig()
+
+	cert, err := tls.LoadX509KeyPair(config.CertPem, config.CertKey)
+	if err != nil {
+		log.Fatalf("server: loadkeys: %s", err)
+	}
+
+	tlscfg := tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
+	conn, err := tls.Dial("tcp", streamIntegrationURL, &tlscfg)
+	if err != nil {
+		log.Fatalf("client: dial: %s", err)
+	}
+	defer conn.Close()
+	log.Println("client: connected to: ", conn.RemoteAddr())
+
+	{
+		reply := make([]byte, 256)
+		n, err := conn.Read(reply)
+		log.Printf("client: read %q (%d bytes)", string(reply[:n]), n)
+		fmt.Printf("client: read %q (%d bytes)\n", string(reply[:n]), n)
+		rep := string(reply[:n])
+		fmt.Println(rep)
+		_ = err
+		_ = rep
+	}
+	state := conn.ConnectionState()
+	for _, v := range state.PeerCertificates {
+		fmt.Println(x509.MarshalPKIXPublicKey(v.PublicKey))
+		fmt.Println(v.Subject)
+	}
+	log.Println("client: handshake: ", state.HandshakeComplete)
+	log.Println("client: mutual: ", state.NegotiatedProtocolIsMutual)
+
+	rm := new(models.AllRequestTypesExample)
+	am := models.AuthenticationMessage{}
+	am.AppKey = apiKey
+	am.Session = sessionKey
+
+	rm.Authentication = &am
+	rm.OpTypes = "authentication"
+
+	msg, err := json.Marshal(rm)
+	msgstr := string(msg)
+
+	m2 := new(streamAuth)
+	m2.AppKey = apiKey
+	m2.Session = sessionKey
+	m2.Op = "authentication"
+
+	msg2, err := json.Marshal(m2)
+	msg2str := string(msg2) + "\r\n"
+	n, err := io.WriteString(conn, msg2str)
+	if err != nil {
+		log.Fatalf("client: write: %s", err)
+	}
+	log.Printf("client: wrote %q (%d bytes)", msgstr, n)
+
+	reply := make([]byte, 256)
+	n, err = conn.Read(reply)
+	log.Printf("client: read %q (%d bytes)", string(reply[:n]), n)
+	fmt.Printf("client: read %q (%d bytes)\n", string(reply[:n]), n)
+	rep := string(reply[:n])
+	_ = rep
+	log.Print("client: exiting")
+
+	// cfg := client.DefaultTransportConfig()
+	// cfg.Host = streamIntegrationURL
+	// cli := client.NewHTTPClientWithConfig(strfmt.Default, cfg)
+
+	// tls := new(httptransport.TLSClientOptions)
+	// tls.Certificate = config.CertPem
+	// tls.Key = config.CertKey
+	// tls.InsecureSkipVerify = true
+
+	// tlst, err := httptransport.TLSTransport(*tls)
+	// fmt.Println(tlst)
+
+	// prp := operations.NewPostRequestParams()
+	// rm := new(models.AllRequestTypesExample)
+	// rm.Authentication = new(models.AuthenticationMessage)
+	// rm.Authentication.AppKey = creds.AppKey
+	// rm.Authentication.Session = nyarumClient.SessionKey
+
+	// prp.RequestMessage = rm
+	// eee := cli.Operations.PostRequest(prp, opFunc)
+
+	// m := models.AuthenticationMessage{}
+	// m.AppKey = creds.AppKey
+	// m.Session = nyarumClient.SessionKey
+
+	// //res, err = models.AllRequestTypesExample
+
+	// fmt.Println(m, eee)
+
 }
 
 // MarketBook --
@@ -124,6 +244,16 @@ func (cli *NyarumClient) MarketBook(marketID string) (betting.MarketBook, error)
 	filter := betting.Filter{MarketIDs: []string{marketID}}
 	mb, err := cli.ListMarketBook(filter)
 	return mb[0], err
+}
+
+// MarketBooks --
+func (cli *NyarumClient) MarketBooks(marketIDs []string) ([]betting.MarketBook, error) {
+	filter := betting.Filter{MarketIDs: marketIDs,
+		Sort:         "MAXIMUM_TRADED",
+		MaxResults:   20,
+		FromCurrency: "SEK"}
+	mb, err := cli.ListMarketBook(filter)
+	return mb, err
 }
 
 // Login --
@@ -135,6 +265,15 @@ func Login() *betting.Betfair {
 
 	nyarumClient := GetNyarumClient(creds.AppKey)
 	return nyarumClient
+}
+
+func (cli *NyarumClient) getMarketIDs(markets []betting.MarketCatalogue) []string {
+	var IDs []string
+
+	for _, market := range markets {
+		IDs = append(IDs, market.MarketID)
+	}
+	return IDs
 }
 
 func testSwag() {
