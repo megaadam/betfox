@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	//httptransport "github.com/go-openapi/runtime/client"
 
@@ -140,8 +141,8 @@ func (cli *NyarumClient) Markets() ([]betting.MarketCatalogue, error) {
 	return markets, err
 } // Markets()
 
-// Stream
-func Stream(apiKey, sessionKey string) {
+// Stream --
+func Stream(apiKey, sessionKey, market, eventID string) {
 	log.SetOutput(os.Stdout)
 	config := loadConfig()
 
@@ -180,7 +181,10 @@ func Stream(apiKey, sessionKey string) {
 	am := models.AuthenticationMessage{}
 	am.AppKey = apiKey
 	am.Session = sessionKey
+	marsh, err := am.MarshalJSON()
+	mx := string(marsh) + "\r\n"
 
+	_ = mx
 	rm.Authentication = &am
 	rm.OpTypes = "authentication"
 
@@ -194,49 +198,54 @@ func Stream(apiKey, sessionKey string) {
 
 	msg2, err := json.Marshal(m2)
 	msg2str := string(msg2) + "\r\n"
+	_ = msg2str
 	n, err := io.WriteString(conn, msg2str)
 	if err != nil {
 		log.Fatalf("client: write: %s", err)
 	}
 	log.Printf("client: wrote %q (%d bytes)", msgstr, n)
 
-	reply := make([]byte, 256)
+	reply := make([]byte, 1256)
 	n, err = conn.Read(reply)
 	log.Printf("client: read %q (%d bytes)", string(reply[:n]), n)
 	fmt.Printf("client: read %q (%d bytes)\n", string(reply[:n]), n)
 	rep := string(reply[:n])
 	_ = rep
+
+	example := fmt.Sprintf("{\"op\":\"marketSubscription\",\"id\":2,\"marketFilter\":{\"marketIds\":[\"%s\"],\"bspMarket\":true,\"bettingTypes\":"+
+		"[\"ODDS\"],\"eventTypeIds\":[\"1\"],\"eventIds\":[\"%s\"],\"turnInPlayEnabled\":true,\"marketTypes\":[\"MATCH_ODDS\"]}"+
+		",\"marketDataFilter\":{}}", market, eventID)
+
+	sockWrite(conn, example)
+
+	for i := 1; i < 20; i++ {
+		sockRead(conn)
+		time.Sleep(2 * time.Second)
+	}
 	log.Print("client: exiting")
+}
 
-	// cfg := client.DefaultTransportConfig()
-	// cfg.Host = streamIntegrationURL
-	// cli := client.NewHTTPClientWithConfig(strfmt.Default, cfg)
+func sockWrite(conn *tls.Conn, m string) {
+	n, err := io.WriteString(conn, m+"\r\n")
+	if err != nil {
+		log.Fatalf("client: write: %s", err)
+	}
+	log.Printf("client: wrote %q (%d bytes)", m, n)
 
-	// tls := new(httptransport.TLSClientOptions)
-	// tls.Certificate = config.CertPem
-	// tls.Key = config.CertKey
-	// tls.InsecureSkipVerify = true
+	reply := make([]byte, 1256)
+	n, err = conn.Read(reply)
+	rep := string(reply[:n])
+	log.Printf("client: read %q (%d bytes)", rep, n)
+	fmt.Printf("client: read %q (%d bytes)\n", rep, n)
+}
 
-	// tlst, err := httptransport.TLSTransport(*tls)
-	// fmt.Println(tlst)
-
-	// prp := operations.NewPostRequestParams()
-	// rm := new(models.AllRequestTypesExample)
-	// rm.Authentication = new(models.AuthenticationMessage)
-	// rm.Authentication.AppKey = creds.AppKey
-	// rm.Authentication.Session = nyarumClient.SessionKey
-
-	// prp.RequestMessage = rm
-	// eee := cli.Operations.PostRequest(prp, opFunc)
-
-	// m := models.AuthenticationMessage{}
-	// m.AppKey = creds.AppKey
-	// m.Session = nyarumClient.SessionKey
-
-	// //res, err = models.AllRequestTypesExample
-
-	// fmt.Println(m, eee)
-
+func sockRead(conn *tls.Conn) {
+	reply := make([]byte, 1256)
+	n, err := conn.Read(reply)
+	_ = err
+	rep := string(reply[:n])
+	log.Printf("client: read %q (%d bytes)", rep, n)
+	fmt.Printf("client: read %q (%d bytes)\n", rep, n)
 }
 
 // MarketBook --
