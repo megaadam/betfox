@@ -21,6 +21,6 @@ func main() {
 	marketID := markets[0].MarketID
 	fmt.Println(marketID)
 	eventID := markets[0].Event.ID
+	fmt.Println("---------------------\n\n", markets[0].Event.Name, "\t", markets[0].Competition.Name)
 	session.Stream(cli.Client.ApiKey, cli.Client.SessionKey, marketID, eventID)
-	fmt.Println(markets[0].Event.Name, "\t", markets[0].Competition.Name)
 }

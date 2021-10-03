@@ -142,7 +142,7 @@ func (cli *NyarumClient) Markets() ([]betting.MarketCatalogue, error) {
 } // Markets()
 
 // Stream --
-func Stream(apiKey, sessionKey, market, eventID string) {
+func Stream(apiKey, sessionKey, marketID, eventID string) {
 	log.SetOutput(os.Stdout)
 	config := loadConfig()
 
@@ -170,55 +170,43 @@ func Stream(apiKey, sessionKey, market, eventID string) {
 		_ = rep
 	}
 	state := conn.ConnectionState()
-	for _, v := range state.PeerCertificates {
-		fmt.Println(x509.MarshalPKIXPublicKey(v.PublicKey))
-		fmt.Println(v.Subject)
-	}
-	log.Println("client: handshake: ", state.HandshakeComplete)
-	log.Println("client: mutual: ", state.NegotiatedProtocolIsMutual)
+	// for _, v := range state.PeerCertificates {
+	// 	fmt.Println(x509.MarshalPKIXPublicKey(v.PublicKey))
+	// 	fmt.Println(v.Subject)
+	// }
+	fmt.Println("client: handshake: ", state.HandshakeComplete)
+	fmt.Println("client: mutual: ", state.NegotiatedProtocolIsMutual)
 
-	rm := new(models.AllRequestTypesExample)
 	am := models.AuthenticationMessage{}
 	am.AppKey = apiKey
 	am.Session = sessionKey
 	marsh, err := am.MarshalJSON()
-	mx := string(marsh) + "\r\n"
+	mx := string(marsh)
+	mx = strings.Replace(mx, "AuthenticationMessage", "authentication", 1)
 
-	_ = mx
-	rm.Authentication = &am
-	rm.OpTypes = "authentication"
+	sockWrite(conn, mx)
 
-	msg, err := json.Marshal(rm)
-	msgstr := string(msg)
-
-	m2 := new(streamAuth)
-	m2.AppKey = apiKey
-	m2.Session = sessionKey
-	m2.Op = "authentication"
-
-	msg2, err := json.Marshal(m2)
-	msg2str := string(msg2) + "\r\n"
-	_ = msg2str
-	n, err := io.WriteString(conn, msg2str)
-	if err != nil {
-		log.Fatalf("client: write: %s", err)
+	subscription := new(models.MarketSubscriptionMessage)
+	subscription.SetID(2)
+	mf := models.MarketFilter{MarketIds: []string{marketID},
+		BspMarket:         false,
+		MarketTypes:       []string{"MATCH_ODDS"},
+		TurnInPlayEnabled: true,
 	}
-	log.Printf("client: wrote %q (%d bytes)", msgstr, n)
+	subscription.MarketFilter = &mf
+	mdf := models.MarketDataFilter{Fields: []string{"EX_LTP"}}
+	mdf.LadderLevels = 2
+	subscription.MarketDataFilter = &mdf
 
-	reply := make([]byte, 1256)
-	n, err = conn.Read(reply)
-	log.Printf("client: read %q (%d bytes)", string(reply[:n]), n)
-	fmt.Printf("client: read %q (%d bytes)\n", string(reply[:n]), n)
-	rep := string(reply[:n])
-	_ = rep
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	s, err := subscription.MarshalJSON()
+	subsStr := string(s)
+	subsStr = strings.Replace(subsStr, "MarketSubscriptionMessage", "marketSubscription", 1)
 
-	example := fmt.Sprintf("{\"op\":\"marketSubscription\",\"id\":2,\"marketFilter\":{\"marketIds\":[\"%s\"],\"bspMarket\":true,\"bettingTypes\":"+
-		"[\"ODDS\"],\"eventTypeIds\":[\"1\"],\"eventIds\":[\"%s\"],\"turnInPlayEnabled\":true,\"marketTypes\":[\"MATCH_ODDS\"]}"+
-		",\"marketDataFilter\":{}}", market, eventID)
+	fmt.Println(subsStr)
+	sockWrite(conn, subsStr)
 
-	sockWrite(conn, example)
-
-	for i := 1; i < 20; i++ {
+	for i := 0; i < 3; i++ {
 		sockRead(conn)
 		time.Sleep(2 * time.Second)
 	}
@@ -235,7 +223,6 @@ func sockWrite(conn *tls.Conn, m string) {
 	reply := make([]byte, 1256)
 	n, err = conn.Read(reply)
 	rep := string(reply[:n])
-	log.Printf("client: read %q (%d bytes)", rep, n)
 	fmt.Printf("client: read %q (%d bytes)\n", rep, n)
 }
 
@@ -244,7 +231,6 @@ func sockRead(conn *tls.Conn) {
 	n, err := conn.Read(reply)
 	_ = err
 	rep := string(reply[:n])
-	log.Printf("client: read %q (%d bytes)", rep, n)
 	fmt.Printf("client: read %q (%d bytes)\n", rep, n)
 }
 
