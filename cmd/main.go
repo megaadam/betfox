@@ -18,9 +18,15 @@ func main() {
 	_, err = cli.Funds()
 
 	markets, err := cli.Markets()
-	marketID := markets[0].MarketID
+	marketID := markets[3].MarketID
 	fmt.Println(marketID)
-	eventID := markets[0].Event.ID
+	eventID := markets[3].Event.ID
+	fmt.Println("---------------------\n\n", markets[0].Event.Name, "\t", markets[0].Competition.Name)
+
+	cli.PollMarket(marketID, 8000)
+
+	return // ZAP !
+
 	fmt.Println("---------------------\n\n", markets[0].Event.Name, "\t", markets[0].Competition.Name)
 	session.Stream(cli.Client.ApiKey, cli.Client.SessionKey, marketID, eventID)
 }

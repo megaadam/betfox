@@ -188,6 +188,8 @@ func Stream(apiKey, sessionKey, marketID, eventID string) {
 
 	subscription := new(models.MarketSubscriptionMessage)
 	subscription.SetID(2)
+	subscription.ConflateMs = 1000
+	subscription.SegmentationEnabled = true
 	mf := models.MarketFilter{MarketIds: []string{marketID},
 		BspMarket:         false,
 		MarketTypes:       []string{"MATCH_ODDS"},
@@ -206,9 +208,9 @@ func Stream(apiKey, sessionKey, marketID, eventID string) {
 	fmt.Println(subsStr)
 	sockWrite(conn, subsStr)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 200; i++ {
 		sockRead(conn)
-		time.Sleep(2 * time.Second)
+		//time.Sleep(2 * time.Second)
 	}
 	log.Print("client: exiting")
 }
@@ -231,7 +233,7 @@ func sockRead(conn *tls.Conn) {
 	n, err := conn.Read(reply)
 	_ = err
 	rep := string(reply[:n])
-	fmt.Printf("client: read %q (%d bytes)\n", rep, n)
+	log.Printf("client: read %q (%d bytes)\n", rep, n)
 }
 
 // MarketBook --
@@ -249,6 +251,54 @@ func (cli *NyarumClient) MarketBooks(marketIDs []string) ([]betting.MarketBook, 
 		FromCurrency: "SEK"}
 	mb, err := cli.ListMarketBook(filter)
 	return mb, err
+}
+
+// PollMarket --
+func (cli *NyarumClient) PollMarket(marketID string, delay int) {
+	time.Sleep(time.Millisecond * time.Duration(20000))
+	for i := 0; i < 300; i++ {
+		filter := betting.Filter{
+			MarketIDs:  []string{marketID},
+			MaxResults: 1,
+			PriceProjection: &betting.PriceProjection{
+				PriceData:  []betting.EPriceData{"EX_BEST_OFFERS"},
+				Virtualise: true,
+			},
+		}
+		mb, err := cli.ListMarketBook(filter)
+		lmt := mb[0].LastMatchTime.String()
+		fmt.Printf("%s\t%f\t%f\t%f\t%f\t%f\n",
+			lmt, mb[0].TotalMatched,
+			mb[0].Runners[1].EX.AvailableToBack[0].Price,
+			mb[0].Runners[1].EX.AvailableToBack[0].Size,
+			mb[0].Runners[1].EX.AvailableToLay[0].Price,
+			mb[0].Runners[1].EX.AvailableToLay[0].Size)
+
+		if err != nil {
+			fmt.Println(" ----> ", err)
+		}
+
+		// filter = betting.Filter{
+		// 	MarketIDs: []string{marketID},
+		// 	PriceProjection: &betting.PriceProjection{
+		// 		PriceData:  []betting.EPriceData{"EX_BEST_OFFERS"},
+		// 		Virtualise: true,
+		// 	},
+		// }
+
+		// mb, err = cli.ListMarketBook(filter)
+		// fmt.Printf("%f\t%f\t%f\t%f\n",
+		// 	mb[0].Runners[2].EX.AvailableToBack[0].Price,
+		// 	mb[0].Runners[2].EX.AvailableToBack[0].Size,
+		// 	mb[0].Runners[2].EX.AvailableToLay[0].Price,
+		// 	mb[0].Runners[2].EX.AvailableToLay[0].Size)
+
+		// if err != nil {
+		// 	fmt.Println(" ----> ", err)
+		// }
+
+		time.Sleep(time.Millisecond * time.Duration(delay))
+	}
 }
 
 // Login --
