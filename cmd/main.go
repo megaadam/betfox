@@ -23,7 +23,7 @@ func main() {
 	eventID := markets[3].Event.ID
 	fmt.Println("---------------------\n\n", markets[0].Event.Name, "\t", markets[0].Competition.Name)
 
-	cli.PollMarket(marketID, 8000)
+	cli.PollMarket(marketID, 100)
 
 	return // ZAP !
 

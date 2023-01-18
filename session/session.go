@@ -254,25 +254,27 @@ func (cli *NyarumClient) MarketBooks(marketIDs []string) ([]betting.MarketBook, 
 }
 
 // PollMarket --
-func (cli *NyarumClient) PollMarket(marketID string, delay int) {
-	time.Sleep(time.Millisecond * time.Duration(20000))
+func (cli *NyarumClient) PollMarket(marketID string, wait int) {
 	for i := 0; i < 300; i++ {
 		filter := betting.Filter{
-			MarketIDs:  []string{marketID},
-			MaxResults: 1,
-			PriceProjection: &betting.PriceProjection{
-				PriceData:  []betting.EPriceData{"EX_BEST_OFFERS"},
-				Virtualise: true,
-			},
+			MarketIDs: []string{marketID},
+			// MaxResults: 3,
+			// PriceProjection: &betting.PriceProjection{
+			// 	PriceData:  []betting.EPriceData{"EX_BEST_OFFERS"},
+			// 	Virtualise: true,
+			// },
 		}
 		mb, err := cli.ListMarketBook(filter)
 		lmt := mb[0].LastMatchTime.String()
-		fmt.Printf("%s\t%f\t%f\t%f\t%f\t%f\n",
-			lmt, mb[0].TotalMatched,
-			mb[0].Runners[1].EX.AvailableToBack[0].Price,
-			mb[0].Runners[1].EX.AvailableToBack[0].Size,
-			mb[0].Runners[1].EX.AvailableToLay[0].Price,
-			mb[0].Runners[1].EX.AvailableToLay[0].Size)
+		now := time.Now()
+		delay := now.Sub(mb[0].LastMatchTime)
+		fmt.Println(lmt, "DELAY:", delay)
+		// fmt.Printf("%s\t%f\t%f\t%f\t%f\t%f\n",
+		// 	lmt, mb[0].TotalMatched,
+		// 	mb[0].Runners[1].EX.AvailableToBack[0].Price,
+		// 	mb[0].Runners[1].EX.AvailableToBack[0].Size,
+		// 	mb[0].Runners[1].EX.AvailableToLay[0].Price,
+		// 	mb[0].Runners[1].EX.AvailableToLay[0].Size)
 
 		if err != nil {
 			fmt.Println(" ----> ", err)
@@ -297,7 +299,7 @@ func (cli *NyarumClient) PollMarket(marketID string, delay int) {
 		// 	fmt.Println(" ----> ", err)
 		// }
 
-		time.Sleep(time.Millisecond * time.Duration(delay))
+		time.Sleep(time.Millisecond * time.Duration(wait))
 	}
 }
 
